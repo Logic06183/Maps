@@ -9,11 +9,22 @@ import tempfile
 import urllib.request
 import zipfile
 
-# Load the partners data
-data_path = '/Users/craig/Desktop/Maps/partners_data_with_coords (004)_reviewed_RF.xlsx'
-partners_data = pd.read_excel(data_path)
+# Create a DataFrame with the specific country data provided by the user
+country_data = {
+    'Country': [
+        'Botswana', 'Ethiopia', 'Ghana', 'Kenya', 'Malawi', 
+        'Nigeria', 'Sierra Leone', 'South Africa', 'Tanzania', 'Uganda', 'Zambia'
+    ],
+    'HE²AT': [1, 4, 2, 5, 13, 1, 1, 18, 4, 2, 4]
+}
 
-# Define Sub-Saharan African countries with all possible naming variations
+# Note: Handling 'Multicountry' separately since it's not a geographic entity
+multicountry_value = 3  # The value for Multicountry
+
+# Create the partners DataFrame
+heat_partners = pd.DataFrame(country_data)
+
+# Define Sub-Saharan African countries with all possible naming variations for mapping
 subsaharan_countries = [
     'Angola', 'Republic of Angola', 'People\'s Republic of Angola',
     'Benin', 'Republic of Benin', 'Dahomey',
@@ -65,14 +76,6 @@ subsaharan_countries = [
     'Zambia', 'Republic of Zambia',
     'Zimbabwe', 'Republic of Zimbabwe'
 ]
-
-# Filter for sub-Saharan African countries in our data
-ss_africa_partners = partners_data[partners_data['Country'].isin(subsaharan_countries)]
-
-# Count HEAT partners by country (using the original column name from Excel)
-heat_partners = ss_africa_partners.groupby('Country')['HEAT'].sum().reset_index()
-# Rename for display purposes
-heat_partners = heat_partners.rename(columns={'HEAT': 'HE²AT'})
 print(f"HE²AT partners data:\n{heat_partners}")
 
 # Load Natural Earth data from CartoDB's public data server
@@ -237,7 +240,8 @@ fig, ax = plt.figure(figsize=(15, 15)), plt.gca()
 
 # Define color scheme (from light to dark)
 cmap = plt.cm.YlOrRd
-norm = colors.Normalize(vmin=0, vmax=max(heat_partners['HE²AT'].max(), 1))  # Ensure max is at least 1
+# Set a better range for the color normalization to create more visual contrast
+norm = colors.Normalize(vmin=1, vmax=max(heat_partners['HE²AT'].max(), 1))
 
 # Plot countries with no data in light gray
 africa[africa['HE²AT'].isna()].plot(ax=ax, color='lightgray', edgecolor='black')
@@ -283,14 +287,27 @@ for idx, row in africa[~africa['HE²AT'].isna()].iterrows():
             bbox=dict(facecolor='white', alpha=0.5, edgecolor='none', boxstyle='round,pad=0.3')
         )
 
+# Add a text annotation for 'Multicountry' since it's not a geographic entity
+txt = ax.text(
+    0.05, 0.05,  # Position in axes coordinates (bottom left)
+    f"Multicountry: {multicountry_value} partners",
+    transform=ax.transAxes,
+    fontsize=12,
+    bbox=dict(facecolor='white', alpha=0.8, edgecolor='black', boxstyle='round,pad=0.5')
+)
+
 # Save the map
 output_path = '/Users/craig/Desktop/Maps/heat_partners_subsaharan_africa.png'
 plt.savefig(output_path, dpi=300, bbox_inches='tight')
 print(f"Map saved to {output_path}")
 
 # Create a summary CSV file with the data
+# Add back the Multicountry data for the CSV
+full_data = heat_partners.copy()
+full_data = pd.concat([full_data, pd.DataFrame({'Country': ['Multicountry'], 'HE²AT': [multicountry_value]})])
+
 summary_path = '/Users/craig/Desktop/Maps/heat_partners_summary.csv'
-heat_partners.to_csv(summary_path, index=False)
+full_data.to_csv(summary_path, index=False)
 print(f"Data summary saved to {summary_path}")
 
 # Display the map
