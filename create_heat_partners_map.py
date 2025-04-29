@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
 from matplotlib.patches import Patch
+import os
+import tempfile
+import urllib.request
+import zipfile
 
 # Load the partners data
 data_path = '/Users/craig/Desktop/Maps/partners_data_with_coords (004)_reviewed_RF.xlsx'
@@ -28,14 +32,62 @@ ss_africa_partners = partners_data[partners_data['Country'].isin(subsaharan_coun
 heat_partners = ss_africa_partners.groupby('Country')['HEAT'].sum().reset_index()
 print(f"HEAT partners data:\n{heat_partners}")
 
-# Load world map data
-world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+# Download and load Natural Earth data
+def get_naturalearth_lowres():
+    # URL for Natural Earth 1:110m Cultural Vectors, Admin 0 - Countries
+    url = "https://www.naturalearthdata.com/http//www.naturalearthdata.com/download/110m/cultural/ne_110m_admin_0_countries.zip"
+    
+    # Create temporary directory
+    temp_dir = tempfile.mkdtemp()
+    
+    try:
+        # Download the file
+        zip_path = os.path.join(temp_dir, "ne_110m_admin_0_countries.zip")
+        print(f"Downloading Natural Earth data from {url}")
+        urllib.request.urlretrieve(url, zip_path)
+        
+        # Extract the files
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        # Find the shapefile
+        shapefile_path = os.path.join(temp_dir, "ne_110m_admin_0_countries.shp")
+        
+        # Read the shapefile
+        gdf = gpd.read_file(shapefile_path)
+        return gdf
+    
+    except Exception as e:
+        print(f"Error downloading Natural Earth data: {e}")
+        return None
+
+# Try to download and load Natural Earth data
+world = get_naturalearth_lowres()
 
 # Merge the partner counts with the world map data
-world = world.merge(heat_partners, left_on='name', right_on='Country', how='left')
+# Natural Earth uses different country name keys than our dataset
+# Standard column name in Natural Earth 110m for country names is 'SOVEREIGNT' or 'NAME'
+name_column = 'SOVEREIGNT' if 'SOVEREIGNT' in world.columns else 'NAME'
+
+# Create a mapping dictionary for potential name mismatches
+name_mapping = {
+    "Ivory Coast": "Côte d'Ivoire",
+    "Democratic Republic of the Congo": "Democratic Republic of Congo",
+    "Republic of the Congo": "Congo",
+    "Swaziland": "Eswatini",
+    "Tanzania": "United Republic of Tanzania"
+}
+
+# Apply name mapping to standardize country names
+world[name_column] = world[name_column].replace(name_mapping)
+
+# Merge data
+world = world.merge(heat_partners, left_on=name_column, right_on='Country', how='left')
 
 # Filter to only show African continent
-africa = world[world['continent'] == 'Africa']
+# Natural Earth uses 'CONTINENT' or 'REGION_UN' to identify continents
+continent_column = 'CONTINENT' if 'CONTINENT' in world.columns else 'REGION_UN'
+africa = world[world[continent_column] == 'Africa']
 
 # Create a figure and axis
 fig, ax = plt.figure(figsize=(15, 15)), plt.gca()
@@ -90,6 +142,11 @@ for idx, row in africa[~africa['HEAT'].isna()].iterrows():
 output_path = '/Users/craig/Desktop/Maps/heat_partners_subsaharan_africa.png'
 plt.savefig(output_path, dpi=300, bbox_inches='tight')
 print(f"Map saved to {output_path}")
+
+# Create a summary CSV file with the data
+summary_path = '/Users/craig/Desktop/Maps/heat_partners_summary.csv'
+heat_partners.to_csv(summary_path, index=False)
+print(f"Data summary saved to {summary_path}")
 
 # Display the map
 plt.show()
