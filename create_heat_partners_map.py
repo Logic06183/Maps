@@ -69,8 +69,10 @@ subsaharan_countries = [
 # Filter for sub-Saharan African countries in our data
 ss_africa_partners = partners_data[partners_data['Country'].isin(subsaharan_countries)]
 
-# Count HE²AT partners by country
-heat_partners = ss_africa_partners.groupby('Country')['HE²AT'].sum().reset_index()
+# Count HEAT partners by country (using the original column name from Excel)
+heat_partners = ss_africa_partners.groupby('Country')['HEAT'].sum().reset_index()
+# Rename for display purposes
+heat_partners = heat_partners.rename(columns={'HEAT': 'HE²AT'})
 print(f"HE²AT partners data:\n{heat_partners}")
 
 # Load Natural Earth data from CartoDB's public data server
